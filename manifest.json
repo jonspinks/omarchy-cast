@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "blacksheep.airplay",
+  "name": "AirPlay",
+  "version": "1.0.0",
+  "author": "Jon",
+  "description": "Cast a screen, a second desktop, or one window to an AirPlay receiver",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "Panel.qml" },
+  "barWidget": {
+    "displayName": "AirPlay",
+    "description": "Receivers on the network, the three ways to use one, and the state of a live session.",
+    "category": "Display",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
