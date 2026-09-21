@@ -293,9 +293,15 @@ print(json.dumps({"ok": True, "message": os.environ.get("MSG", "").strip()}))'
     # The first line is emitted and flushed before the sender blocks on stdin,
     # so waiting for it is waiting for "the code is on the screen".
     #
-    # The budget is generous because a Frame sitting in Art Mode has to wake
-    # before it answers, and a 15 s wait made the FIRST attempt fail and the
-    # second succeed — the request had woken it in the meantime.
+    # The budget is 40 s rather than 15 as tolerance, NOT as a diagnosis. One
+    # first attempt has been seen to fail and the retry immediately succeed,
+    # with the TV awake and already on its AirPlay screen — so the Art Mode
+    # wake-up theory is refuted. The journal shows mirror sessions connected in
+    # the same minute, so a receiver refusing to start a pairing while a
+    # session holds it is the standing suspicion; it is not established, and
+    # the failure has not recurred. If it does, capture the error text: the
+    # distinction that matters is "did not answer" (a timeout, which a longer
+    # budget fixes) against anything else (a refusal, which it does not).
     for _ in $(seq 1 160); do
       [[ -s "$d/out" ]] && break
       sleep 0.25

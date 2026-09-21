@@ -89,8 +89,10 @@ does not spend one of the receiver's few allowed attempts. A wrong code ends the
 run and the receiver shows a new number, so the panel asks you to request
 another rather than retyping.
 
-A receiver waking from Art Mode can take a while to answer the first request;
-the panel waits 40 seconds before giving up.
+The panel waits 40 seconds for the first answer. One first attempt has been
+seen to fail with the retry succeeding, on a TV that was awake and already on
+its AirPlay screen, so the cause is not established — a receiver refusing to
+pair while a session already holds it is the current suspicion.
 
 ## How it works
 
