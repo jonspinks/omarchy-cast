@@ -89,10 +89,14 @@ does not spend one of the receiver's few allowed attempts. A wrong code ends the
 run and the receiver shows a new number, so the panel asks you to request
 another rather than retyping.
 
-The panel waits 40 seconds for the first answer. One first attempt has been
-seen to fail with the retry succeeding, on a TV that was awake and already on
-its AirPlay screen, so the cause is not established — a receiver refusing to
-pair while a session already holds it is the current suspicion.
+Pairing straight after a session used to fail with *Connection reset by peer*:
+a receiver that has just disconnected refuses the next pair-setup for a moment
+while it tears the old session down. Measured on a Frame — reset immediately
+after a session, accepted two seconds later. `pair-start` now retries
+connection-level failures up to three times, which is free because the reset
+happens before any code is submitted and so cannot spend one of the receiver's
+few allowed attempts. Expect the first attempt after a session to take around
+twenty seconds; the panel says "Asking … to show a code…" meanwhile.
 
 ## How it works
 

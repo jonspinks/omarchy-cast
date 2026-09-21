@@ -283,31 +283,44 @@ print(json.dumps({"ok": True, "message": os.environ.get("MSG", "").strip()}))'
     host="${2:-}"
     [[ -n "$host" ]] || fail "pair-start needs a receiver address"
     d="$(pair_dir "$host")"
-    pair_kill "$host"
-    mkdir -p "$d" || fail "cannot create $d"
-    : > "$d/in"; : > "$d/out"; : > "$d/err"
-    # `tail -f` holds stdin open; without a writer the sender would see EOF
-    # and treat it as a cancel.
-    setsid bash -c "tail -f '$d/in' | '$BIN' pair '$host' --interactive --json --timeout 300 > '$d/out' 2> '$d/err'" \
-      >/dev/null 2>&1 &
-    # The first line is emitted and flushed before the sender blocks on stdin,
-    # so waiting for it is waiting for "the code is on the screen".
-    #
-    # The budget is 40 s rather than 15 as tolerance, NOT as a diagnosis. One
-    # first attempt has been seen to fail and the retry immediately succeed,
-    # with the TV awake and already on its AirPlay screen — so the Art Mode
-    # wake-up theory is refuted. The journal shows mirror sessions connected in
-    # the same minute, so a receiver refusing to start a pairing while a
-    # session holds it is the standing suspicion; it is not established, and
-    # the failure has not recurred. If it does, capture the error text: the
-    # distinction that matters is "did not answer" (a timeout, which a longer
-    # budget fixes) against anything else (a refusal, which it does not).
-    for _ in $(seq 1 160); do
-      [[ -s "$d/out" ]] && break
-      sleep 0.25
+
+    # A receiver that has just finished a session RESETS the next pair-setup
+    # for a moment while it tears the old one down. Measured on the Frame:
+    # immediately after a session "Connection reset by peer (os error 104)",
+    # and two seconds later the same request succeeds. Retrying is free — the
+    # reset happens at connect, before any code is submitted, so it cannot
+    # spend one of the receiver's few allowed attempts. Only connection-level
+    # failures are retried; a refusal is reported as it is.
+    line=""
+    for attempt in 1 2 3; do
+      pair_kill "$host"
+      mkdir -p "$d" || fail "cannot create $d"
+      : > "$d/in"; : > "$d/out"; : > "$d/err"
+      # `tail -f` holds stdin open; without a writer the sender would see EOF
+      # and treat it as a cancel.
+      setsid bash -c "tail -f '$d/in' | '$BIN' pair '$host' --interactive --json --timeout 300 > '$d/out' 2> '$d/err'" \
+        >/dev/null 2>&1 &
+      # The first line is emitted and flushed before the sender blocks on
+      # stdin, so waiting for it is waiting for "the code is on the screen".
+      # 40 s is tolerance for a slow receiver, not a fix for the reset above.
+      for _ in $(seq 1 160); do
+        [[ -s "$d/out" ]] && break
+        sleep 0.25
+      done
+      line="$(head -1 "$d/out" 2>/dev/null)"
+      case "$line" in
+        *'"prompt_shown":true'*) break ;;
+        *"Connection reset"*|*"Connection refused"*|*"Broken pipe"*)
+          pair_kill "$host"
+          [[ $attempt -lt 3 ]] && sleep 2 && continue
+          ;;
+        *) break ;;
+      esac
     done
-    if [[ -s "$d/out" ]]; then
-      head -1 "$d/out"
+
+    if [[ -n "$line" ]]; then
+      printf '%s\n' "$line"
+      case "$line" in *'"prompt_shown":true'*) ;; *) pair_kill "$host" ;; esac
     else
       err="$(tail -c 400 "$d/err" 2>/dev/null)"
       pair_kill "$host"
