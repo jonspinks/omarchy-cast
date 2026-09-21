@@ -9,9 +9,16 @@
 #   status                     what is running now
 #   discover [timeout]         receivers on the network
 #   windows                    open windows, for "just an app" mode
-#   start <host> screen|extend|window [target]
+#   start <host> screen|extend|window [target] [audio=on|off]
+#                              audio=on adds `--audio system` (default off)
+#   audio-pref [on|off]        read or set the panel's "Send audio" default
+#   pair-start <host>          ask the receiver to show a code; holds the
+#                              connection open while the human reads it
+#   pair-code <host> <code>    send the code on that same connection
+#   pair-cancel <host>         give up without spending an attempt
 #   stop
-#   cleanup                    clear a leftover virtual output
+#   cleanup                    clear a leftover virtual output, and put back an
+#                              output a killed audio session left configured
 #
 # A session runs as a transient systemd user unit. That buys three things a
 # bare background process does not: it survives a shell reload, the unit name
@@ -40,6 +47,29 @@ BIN="$(airplay_bin)" || fail "the airplay binary was not found on PATH or in ~/W
 
 unit_active() { systemctl --user is-active --quiet "$UNIT" 2>/dev/null; }
 
+# The "Send audio" switch, remembered across shell reloads. OFF unless Jon has
+# turned it on: with audio on the session moves the TV's volume, and the Rust
+# audio path has not been checked on the TV yet. Anything but "on" reads as off.
+AUDIO_PREF="${XDG_STATE_HOME:-$HOME/.local/state}/blacksheep.airplay/audio"
+audio_pref() { [[ "$(cat "$AUDIO_PREF" 2>/dev/null)" == "on" ]] && printf on || printf off; }
+
+# ---- pairing helpers -------------------------------------------------------
+# One directory per receiver under the runtime dir, holding the input the
+# sender is reading and the JSON it has written.
+PAIR_ROOT="${XDG_RUNTIME_DIR:-/tmp}/blacksheep.airplay/pair"
+pair_dir() { printf '%s/%s' "$PAIR_ROOT" "$(printf '%s' "$1" | tr -c 'A-Za-z0-9._-' '_')"; }
+pair_kill() {
+  local d; d="$(pair_dir "$1")"
+  pkill -f "tail -f $d/in" 2>/dev/null
+  pkill -f "pair $1 --interactive" 2>/dev/null
+  rm -rf "$d" 2>/dev/null
+  return 0
+}
+
+# Which receivers we hold credentials for. Offline: no mDNS, no receiver
+# contacted, safe to call on every status poll.
+paired_hosts() { "$BIN" pair --list --json 2>/dev/null || printf '{"paired":[]}'; }
+
 case "${1:-status}" in
 
   status)
@@ -50,7 +80,10 @@ case "${1:-status}" in
     [[ -z "$daemon" ]] && daemon="null"
     active=false; unit_active && active=true
     desc="$(systemctl --user show -p Description --value "$UNIT" 2>/dev/null)"
-    DAEMON="$daemon" ACTIVE="$active" DESC="${desc:-}" python3 - <<'PY'
+    # Title-free record of whether the running unit was started with audio
+    # (set by `start` via --setenv); the description embeds a window title.
+    unit_env="$(systemctl --user show -p Environment --value "$UNIT" 2>/dev/null)"
+    DAEMON="$daemon" ACTIVE="$active" DESC="${desc:-}" UNIT_ENV="${unit_env:-}" PREF="$(audio_pref)" PAIRED="$(paired_hosts)" python3 - <<'PY'
 import json, os
 raw = os.environ.get("DAEMON") or "null"
 try:
@@ -65,12 +98,30 @@ desc = os.environ.get("DESC") or None
 # exist, which would read as a live session to the panel.
 if not active or desc == "airplay-session.service":
     desc = None
+# True/False only for an active unit that carries the marker; None otherwise
+# (the panel then falls back to the description).
+try:
+    paired = [p.get("host") for p in json.loads(os.environ.get("PAIRED") or "{}").get("paired", [])]
+except Exception:
+    paired = []
+unit_audio = None
+if active:
+    env = (os.environ.get("UNIT_ENV") or "").split()
+    if "AIRPLAY_PANEL_AUDIO=on" in env:
+        unit_audio = True
+    elif "AIRPLAY_PANEL_AUDIO=off" in env:
+        unit_audio = False
 out = {
     "ok": True,
     "unit_active": active,
     "unit_description": desc,
+    "unit_audio": unit_audio,
     "session": d.get("session"),
     "orphan": d.get("orphan"),
+    "audio_pref": os.environ.get("PREF") == "on",
+    # Hosts we hold credentials for, so the panel can mark a receiver paired
+    # and skip offering to pair it again. Read from disk, not the network.
+    "paired": paired,
 }
 print(json.dumps(out))
 PY
@@ -143,8 +194,13 @@ print(json.dumps({"ok": True, "windows": out}))
     ;;
 
   start)
-    host="${2:-}"; mode="${3:-extend}"; target="${4:-}"
+    host="${2:-}"; mode="${3:-extend}"; target="${4:-}"; audio="${5:-audio=off}"
     [[ -n "$host" ]] || fail "start needs a receiver address"
+    case "$audio" in
+      audio=on|on) audio=on ;;
+      audio=off|off|"") audio=off ;;
+      *) fail "audio must be audio=on or audio=off, not $audio" ;;
+    esac
     unit_active && fail "a session is already running — stop it first"
 
     args=("$BIN" mirror "$host")
@@ -160,18 +216,42 @@ print(json.dumps({"ok": True, "windows": out}))
       *) fail "unknown mode $mode" ;;
     esac
     args+=(--seconds 0)
+    # System audio. `--audio system` now means SINK mode: the sender publishes
+    # its own output named after the receiver and the laptop's sound goes to
+    # the TV instead of the speakers, switching back when the run ends. The
+    # capture backend, latency, A/V offset and volume sync all stay at the
+    # sender's defaults (sink, 300 ms, 0 UNCALIBRATED, on); `--audio-capture
+    # pipewire` is the escape hatch that keeps the sound on the laptop too, and
+    # is deliberately not exposed here — it is a triage flag, not a choice.
+    [[ "$audio" == on ]] && args+=(--audio system)
 
     label="$mode"
     [[ -n "$target" ]] && label="$mode: $target"
+    [[ "$audio" == on ]] && label="$label + audio"
     if systemd-run --user --quiet \
          --unit="$UNIT" \
          --description="AirPlay $label -> $host" \
+         --setenv=AIRPLAY_PANEL_AUDIO="$audio" \
          --collect \
          -- "${args[@]}" >/dev/null 2>&1; then
       printf '{"ok":true,"started":true}\n'
     else
       fail "systemd-run refused to start the session (try: journalctl --user -u $UNIT -n 20)"
     fi
+    ;;
+
+  audio-pref)
+    case "${2:-}" in
+      "") ;;
+      on|off)
+        mkdir -p "$(dirname "$AUDIO_PREF")" || fail "cannot create $(dirname "$AUDIO_PREF")"
+        printf '%s\n' "$2" > "$AUDIO_PREF.tmp" && mv -f "$AUDIO_PREF.tmp" "$AUDIO_PREF" \
+          || fail "cannot write $AUDIO_PREF"
+        ;;
+      *) fail "audio-pref takes on or off" ;;
+    esac
+    if [[ "$(audio_pref)" == on ]]; then v=true; else v=false; fi
+    printf '{"ok":true,"audio_pref":%s}\n' "$v"
     ;;
 
   stop)
@@ -181,9 +261,81 @@ print(json.dumps({"ok": True, "windows": out}))
 
   cleanup)
     msg="$("$BIN" extend --cleanup 2>&1)"
+    # A killed audio session leaves nothing visible — the sink node dies with
+    # its process — but it can leave the machine CONFIGURED for a sink that no
+    # longer exists, so the output Jon had before the crash never comes back.
+    # That belongs to the same button. Skipped while a session runs, because a
+    # live sender holds the lock and the cleanup would answer "busy".
+    if ! unit_active; then
+      msg="$msg"$'\n'"$("$BIN" audio --cleanup 2>&1)"
+    fi
     MSG="$msg" python3 -c '
 import json, os
 print(json.dumps({"ok": True, "message": os.environ.get("MSG", "").strip()}))'
+    ;;
+
+  pair-start)
+    # Ask the receiver to put a code on its screen, and KEEP THE CONNECTION
+    # OPEN while the human reads it. That is not a nicety: pair-setup state
+    # belongs to the connection, so a code submitted by a later process is
+    # always stale — measured on the Frame, which issued 1878 and then refused
+    # it. One process, one socket, the human in the middle.
+    host="${2:-}"
+    [[ -n "$host" ]] || fail "pair-start needs a receiver address"
+    d="$(pair_dir "$host")"
+    pair_kill "$host"
+    mkdir -p "$d" || fail "cannot create $d"
+    : > "$d/in"; : > "$d/out"; : > "$d/err"
+    # `tail -f` holds stdin open; without a writer the sender would see EOF
+    # and treat it as a cancel.
+    setsid bash -c "tail -f '$d/in' | '$BIN' pair '$host' --interactive --json --timeout 300 > '$d/out' 2> '$d/err'" \
+      >/dev/null 2>&1 &
+    # The first line is emitted and flushed before the sender blocks on stdin,
+    # so waiting for it is waiting for "the code is on the screen".
+    #
+    # The budget is generous because a Frame sitting in Art Mode has to wake
+    # before it answers, and a 15 s wait made the FIRST attempt fail and the
+    # second succeed — the request had woken it in the meantime.
+    for _ in $(seq 1 160); do
+      [[ -s "$d/out" ]] && break
+      sleep 0.25
+    done
+    if [[ -s "$d/out" ]]; then
+      head -1 "$d/out"
+    else
+      err="$(tail -c 400 "$d/err" 2>/dev/null)"
+      pair_kill "$host"
+      fail "${err:-$host did not answer in 40s — if its screen was off it may be waking up; try again}"
+    fi
+    ;;
+
+  pair-code)
+    host="${2:-}"; code="${3:-}"
+    [[ -n "$host" ]] || fail "pair-code needs a receiver address"
+    d="$(pair_dir "$host")"
+    [[ -d "$d" && -s "$d/out" ]] || fail "no pairing is waiting for a code — start one first"
+    [[ "$code" =~ ^[0-9]{4}$ ]] || fail "the code is four digits"
+    printf '%s\n' "$code" >> "$d/in"
+    for _ in $(seq 1 80); do
+      [[ "$(wc -l < "$d/out")" -ge 2 ]] && break
+      sleep 0.25
+    done
+    line="$(sed -n 2p "$d/out")"
+    pair_kill "$host"
+    if [[ -n "$line" ]]; then
+      printf '%s\n' "$line"
+    else
+      fail "the receiver did not answer after the code was sent"
+    fi
+    ;;
+
+  pair-cancel)
+    # Closing the input ends the run BEFORE a proof is built, so a cancel
+    # never spends one of the receiver's few allowed attempts.
+    host="${2:-}"
+    [[ -n "$host" ]] || fail "pair-cancel needs a receiver address"
+    pair_kill "$host"
+    printf '{"ok":true,"cancelled":true}\n'
     ;;
 
   *)

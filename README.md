@@ -35,9 +35,62 @@ reason in the tooltip:
 | Samsung Frame (`LS*`) | works — proven end to end |
 | Mac | selectable, marked untested |
 | Apple TV | not supported — needs FairPlay, which the sender does not implement |
-| Speakers (Sonos, HomePod, amps) | not yet — audio is not in the sender |
+| Speakers (Sonos, HomePod, amps) | not yet — the sender sends audio only alongside video, to a TV |
 
-The **Send audio** switch is present but disabled until audio is ported.
+The **Send audio** switch sends the laptop's system audio to the TV with the
+picture (`airplay mirror ... --audio system`). It is **off by default** and
+remembered across shell reloads (`bin/airplay-ctl audio-pref on|off`, stored in
+`$XDG_STATE_HOME/blacksheep.airplay/audio`). It applies when a session starts;
+while one runs the switch shows that session's audio and cannot be flipped.
+
+With audio on the sound goes to the TV **instead of** the speakers, as on a
+Mac: the sender publishes its own output named after the receiver (`AirPlay:
+75" The Frame`), the laptop switches to it, and the previous output comes back
+when the session ends. The handover waits until the TV's volume has been set
+from the laptop's, so the speakers keep playing right up to the moment the TV
+starts making sound — and if that never happens the output is never taken.
+The volume keys then drive the TV, and the TV remote moves that output's own
+slider. While a session runs the panel shows **Sound out**: the TV's name once
+the handover has happened, "the speakers, until the TV's volume is set" before
+it, and a red line if the volume side failed or if you picked another output
+yourself (which ends the sound for that session — restart it to get it back).
+
+Heard on a Samsung Frame on 2026-09-21 and working: the laptop's level maps
+to the TV (30% became -21 dB), the TV confirms it, and the sound follows about
+three seconds later once that confirmation lands. Lip sync is not yet
+calibrated, so the A/V offset still defaults to 0.
+
+**Clean it up** also puts back an output that a killed session left configured
+(`airplay audio --cleanup`; `airplay audio --status` says whether there is
+anything to put back). The sink itself cannot be orphaned — the node dies with
+its process — so the only rot is the remembered default.
+
+## Pairing
+
+Most receivers connect without a code. One that is set to ask shows four digits
+on its own screen, and the panel offers **Pair with a code…** under a selected
+receiver (**Pair again…** if it is already paired — a paired receiver carries a
+key mark and connects silently, with nothing appearing on its screen).
+
+The code belongs to the connection that asked for it. Submitting it from a
+second command makes the receiver issue a *new* number and refuse the one you
+just read — measured on a Frame, which handed out 1878 and then rejected it. So
+the sender holds one socket open across the whole exchange: ask, wait for a
+human, answer on that same connection. `bin/airplay-ctl` owns that process:
+
+```
+bin/airplay-ctl pair-start <host>          # ask; holds the connection open
+bin/airplay-ctl pair-code  <host> <code>   # answer on that same connection
+bin/airplay-ctl pair-cancel <host>         # give up without spending an attempt
+```
+
+Cancelling matters: giving up closes the input before a proof is built, so it
+does not spend one of the receiver's few allowed attempts. A wrong code ends the
+run and the receiver shows a new number, so the panel asks you to request
+another rather than retyping.
+
+A receiver waking from Art Mode can take a while to answer the first request;
+the panel waits 40 seconds before giving up.
 
 ## How it works
 
@@ -47,7 +100,8 @@ from a shell:
 
 ```
 bin/airplay-ctl status | discover [timeout] | windows
-bin/airplay-ctl start <host> screen|extend|window [target]
+bin/airplay-ctl start <host> screen|extend|window [target] [audio=on|off]
+bin/airplay-ctl audio-pref [on|off]
 bin/airplay-ctl stop | cleanup
 ```
 
