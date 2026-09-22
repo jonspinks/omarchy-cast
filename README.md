@@ -7,6 +7,27 @@ Installs as the bar widget `blacksheep.airplay`. It is the front end for
 [omarchy-airplay](https://github.com/jonspinks/omarchy-airplay), the Rust
 sender that does the actual streaming.
 
+## Install
+
+The sender goes on first — this widget is only its front end:
+
+```bash
+# 1. Build and install the sender (see omarchy-airplay for dependencies)
+git clone https://github.com/jonspinks/omarchy-airplay
+cd omarchy-airplay && cargo build --release
+install -Dm755 target/release/airplay ~/.local/bin/airplay
+
+# 2. Then the widget
+omarchy plugin add https://github.com/jonspinks/omarchy-cast --enable
+omarchy restart shell
+```
+
+`omarchy restart shell` rather than a plugin reload: the bar icon is set at
+construction, and a hot reload re-reads the code without re-creating the widget.
+
+Optionally add [omarchy-workspaces](https://github.com/jonspinks/omarchy-workspaces),
+which marks the workspace that is streaming.
+
 ## What it does
 
 The panel has two collapsible sections, **Video** and **Audio**. Opening one
@@ -116,8 +137,9 @@ than as a child of the shell. So a shell reload cannot orphan a stream, only
 one session can run at a time, and **Stop** is a clean SIGTERM into the
 sender's tested teardown. Logs: `journalctl --user -u airplay-session`.
 
-The script looks for `airplay` on `PATH`, then `~/.local/bin/airplay`, then
-`~/Work/airplay-rs/target/release/airplay`.
+The script takes `$AIRPLAY_BIN` if it is set and executable, then looks for
+`airplay` on `PATH`, then `~/.local/bin/airplay`. Point `AIRPLAY_BIN` at
+`target/release/airplay` to run against a build tree without installing it.
 
 ## Requirements
 

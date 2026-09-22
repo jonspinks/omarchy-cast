@@ -31,8 +31,11 @@ UNIT="airplay-session"
 
 airplay_bin() {
   local c
+  # AIRPLAY_BIN is the escape hatch for a build tree: point it straight at
+  # target/release/airplay and skip the search.
+  [[ -n "${AIRPLAY_BIN:-}" && -x "${AIRPLAY_BIN}" ]] && { printf '%s' "$AIRPLAY_BIN"; return 0; }
   c="$(command -v airplay 2>/dev/null)" && { printf '%s' "$c"; return 0; }
-  for c in "$HOME/.local/bin/airplay" "$HOME/Work/airplay-rs/target/release/airplay"; do
+  for c in "$HOME/.local/bin/airplay"; do
     [[ -x "$c" ]] && { printf '%s' "$c"; return 0; }
   done
   return 1
@@ -43,11 +46,11 @@ fail() {
   exit 0   # The panel reads JSON, so an error is data, not an exit code.
 }
 
-BIN="$(airplay_bin)" || fail "the airplay binary was not found on PATH or in ~/Work/airplay-rs/target/release"
+BIN="$(airplay_bin)" || fail "the airplay binary was not found on PATH, in ~/.local/bin, or at \$AIRPLAY_BIN"
 
 unit_active() { systemctl --user is-active --quiet "$UNIT" 2>/dev/null; }
 
-# The "Send audio" switch, remembered across shell reloads. OFF unless Jon has
+# The "Send audio" switch, remembered across shell reloads. OFF unless the user has
 # turned it on: with audio on the session moves the TV's volume, and the Rust
 # audio path has not been checked on the TV yet. Anything but "on" reads as off.
 AUDIO_PREF="${XDG_STATE_HOME:-$HOME/.local/state}/blacksheep.airplay/audio"
@@ -263,7 +266,7 @@ print(json.dumps({"ok": True, "windows": out}))
     msg="$("$BIN" extend --cleanup 2>&1)"
     # A killed audio session leaves nothing visible — the sink node dies with
     # its process — but it can leave the machine CONFIGURED for a sink that no
-    # longer exists, so the output Jon had before the crash never comes back.
+    # longer exists, so the output the user had before the crash never comes back.
     # That belongs to the same button. Skipped while a session runs, because a
     # live sender holds the lock and the cleanup would answer "busy".
     if ! unit_active; then

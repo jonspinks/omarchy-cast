@@ -7,7 +7,7 @@ import qs.Ui
 
 // AirPlay bar widget: pick a television, pick how to use it, click.
 //
-// Modelled on the macOS Screen Mirroring menu, which is the experience Jon
+// Modelled on the macOS Screen Mirroring menu, which is the experience the user
 // asked for: the receivers on the network, and for each one the three ways to
 // use it — mirror this screen, use it as a second desktop, or send a single
 // window. A live session shows what it is doing and offers one Stop.
@@ -152,7 +152,7 @@ Panel {
   readonly property bool liveWithAudio: sessionAudio !== null || (session === null && unitAudio)
 
   // "Send audio" for the NEXT session. Remembered by airplay-ctl across shell
-  // reloads, and OFF until Jon turns it on: audio moves the TV's volume, and
+  // reloads, and OFF until the user turns it on: audio moves the TV's volume, and
   // the Rust audio path has not been checked on the TV yet. `audioPending`
   // holds a click until the write lands, so a status poll in between cannot
   // throw the knob back.
@@ -213,7 +213,7 @@ Panel {
   // truthful states and the difference between them matters: BEFORE the
   // handover the speakers are still playing (deliberately — otherwise the
   // sound would be audible nowhere for those few seconds), AFTER it they are
-  // quiet because the sound is going to the TV instead, and if Jon picks
+  // quiet because the sound is going to the TV instead, and if the user picks
   // another output himself the sender gives ours up for good and the TV goes
   // silent.
   //
@@ -231,7 +231,7 @@ Panel {
       return String(a.output_sink_label || a.output_sink) + " — the speakers are quiet"
     // Not handed over. Either it has not happened YET, or the volume side
     // failed and it never will — and "until" would be a lie in the second
-    // case, which is the one Jon would be staring at.
+    // case, which is the one the user would be staring at.
     return audioProblem(a) !== "" ? "The speakers — the output was never handed over"
                                   : "The speakers, until the TV's volume is set"
   }
@@ -481,7 +481,7 @@ Panel {
 
           // The sender's own explanation, wrapped, when the audio side has
           // stopped doing what the row above implies: the volume never armed,
-          // it was refused, or Jon took the output back. The grid elides to
+          // it was refused, or the user took the output back. The grid elides to
           // one line, and these are sentences.
           Text {
             width: parent.width
