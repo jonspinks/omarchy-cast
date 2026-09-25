@@ -27,7 +27,12 @@
 
 set -uo pipefail
 
-UNIT="airplay-session"
+# Named for this plugin, and marked when `start` creates it: another user
+# service could hold any name, so a unit only counts as ours if it is
+# transient and carries OWNER_MARK in its environment. Nothing here stops or
+# reports on a unit that fails that test.
+UNIT="blacksheep-airplay-session"
+OWNER_MARK="AIRPLAY_PANEL_OWNER=blacksheep.airplay"
 
 airplay_bin() {
   local c
@@ -48,7 +53,17 @@ fail() {
 
 BIN="$(airplay_bin)" || fail "the airplay binary was not found on PATH, in ~/.local/bin, or at \$AIRPLAY_BIN"
 
-unit_active() { systemctl --user is-active --quiet "$UNIT" 2>/dev/null; }
+unit_ours() {
+  local transient env word
+  transient="$(systemctl --user show -p Transient --value "$UNIT" 2>/dev/null)"
+  [[ "$transient" == yes ]] || return 1
+  env="$(systemctl --user show -p Environment --value "$UNIT" 2>/dev/null)"
+  for word in $env; do
+    [[ "$word" == "$OWNER_MARK" ]] && return 0
+  done
+  return 1
+}
+unit_active() { systemctl --user is-active --quiet "$UNIT" 2>/dev/null && unit_ours; }
 
 # The "Send audio" switch, remembered across shell reloads. OFF unless the user has
 # turned it on: with audio on the session moves the TV's volume, and the Rust
@@ -95,7 +110,7 @@ case "${1:-status}" in
     # Title-free record of whether the running unit was started with audio
     # (set by `start` via --setenv); the description embeds a window title.
     unit_env="$(systemctl --user show -p Environment --value "$UNIT" 2>/dev/null)"
-    DAEMON="$daemon" ACTIVE="$active" DESC="${desc:-}" UNIT_ENV="${unit_env:-}" PREF="$(audio_pref)" PAIRED="$(paired_hosts)" python3 - <<'PY'
+    DAEMON="$daemon" ACTIVE="$active" UNIT="$UNIT" DESC="${desc:-}" UNIT_ENV="${unit_env:-}" PREF="$(audio_pref)" PAIRED="$(paired_hosts)" python3 - <<'PY'
 import json, os
 raw = os.environ.get("DAEMON") or "null"
 try:
@@ -108,7 +123,7 @@ active = os.environ.get("ACTIVE") == "true"
 desc = os.environ.get("DESC") or None
 # systemd echoes "<unit>.service" as the Description of a unit that does not
 # exist, which would read as a live session to the panel.
-if not active or desc == "airplay-session.service":
+if not active or desc == os.environ.get("UNIT", "") + ".service":
     desc = None
 # True/False only for an active unit that carries the marker; None otherwise
 # (the panel then falls back to the description).
@@ -215,6 +230,8 @@ print(json.dumps({"ok": True, "windows": out}))
       *) fail "audio must be audio=on or audio=off, not $audio" ;;
     esac
     unit_active && fail "a session is already running — stop it first"
+    systemctl --user is-active --quiet "$UNIT" 2>/dev/null \
+      && fail "another user service is already running as $UNIT; not touching it"
 
     args=("$BIN" mirror "$host")
     case "$mode" in
@@ -245,6 +262,7 @@ print(json.dumps({"ok": True, "windows": out}))
          --unit="$UNIT" \
          --description="AirPlay $label -> $host" \
          --setenv=AIRPLAY_PANEL_AUDIO="$audio" \
+         --setenv="$OWNER_MARK" \
          --collect \
          -- "${args[@]}" >/dev/null 2>&1; then
       printf '{"ok":true,"started":true}\n'
@@ -268,8 +286,16 @@ print(json.dumps({"ok": True, "windows": out}))
     ;;
 
   stop)
-    systemctl --user stop "$UNIT" >/dev/null 2>&1
-    printf '{"ok":true,"stopped":true}\n'
+    # Only a unit this plugin started. Anything else under the name is left
+    # running, and reported as not stopped rather than as success.
+    if ! systemctl --user is-active --quiet "$UNIT" 2>/dev/null; then
+      printf '{"ok":true,"stopped":false}\n'
+    elif unit_ours; then
+      systemctl --user stop "$UNIT" >/dev/null 2>&1
+      printf '{"ok":true,"stopped":true}\n'
+    else
+      fail "$UNIT is not a session this panel started; left it running"
+    fi
     ;;
 
   cleanup)

@@ -162,10 +162,15 @@ bin/airplay-ctl audio-pref [on|off]
 bin/airplay-ctl stop | cleanup
 ```
 
-A session runs as a transient systemd user unit, `airplay-session`, rather
-than as a child of the shell. So a shell reload cannot orphan a stream, only
-one session can run at a time, and **Stop** is a clean SIGTERM into the
-sender's tested teardown. Logs: `journalctl --user -u airplay-session`.
+A session runs as a transient systemd user unit, `blacksheep-airplay-session`,
+rather than as a child of the shell. So a shell reload cannot orphan a stream,
+only one session can run at a time, and **Stop** is a clean SIGTERM into the
+sender's tested teardown. Logs: `journalctl --user -u blacksheep-airplay-session`.
+
+The script only treats that unit as its own if it is transient and carries the
+`AIRPLAY_PANEL_OWNER=blacksheep.airplay` marker that `start` sets. If some other
+user service holds the name, the panel neither reports it as a session nor
+stops it, and `start` refuses rather than fight it for the name.
 
 The script takes `$AIRPLAY_BIN` if it is set and executable, then looks for
 `airplay` on `PATH`, then `~/.local/bin/airplay`. Point `AIRPLAY_BIN` at
