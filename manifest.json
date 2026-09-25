@@ -4,6 +4,7 @@
   "name": "AirPlay",
   "version": "1.0.0",
   "author": "Jon",
+  "license": "MIT",
   "description": "Cast a screen, a second desktop, or one window to an AirPlay receiver",
   "kinds": ["bar-widget"],
   "entryPoints": { "barWidget": "Panel.qml" },

@@ -12,21 +12,51 @@ sender that does the actual streaming.
 The sender goes on first — this widget is only its front end:
 
 ```bash
-# 1. Build and install the sender (see omarchy-airplay for dependencies)
-git clone https://github.com/jonspinks/omarchy-airplay
-cd omarchy-airplay && cargo build --release
-install -Dm755 target/release/airplay ~/.local/bin/airplay
+# 1. Build and install the sender (see omarchy-airplay for dependencies),
+#    pinned to the commit this widget was tested against
+git clone https://github.com/jonspinks/omarchy-airplay && git -C omarchy-airplay checkout --detach 441b5cc4d9c6bd8f903b339e76224d172d882204 && cargo build --release --manifest-path omarchy-airplay/Cargo.toml && install -Dm755 omarchy-airplay/target/release/airplay ~/.local/bin/airplay
 
 # 2. Then the widget
 omarchy plugin add https://github.com/jonspinks/omarchy-cast --enable
 omarchy restart shell
 ```
 
+The sender is pinned so that what you build is the commit this widget was
+checked with, not whatever its branch holds today. Move the pin forward
+deliberately, when a newer sender has been tried with this widget.
+
 `omarchy restart shell` rather than a plugin reload: the bar icon is set at
 construction, and a hot reload re-reads the code without re-creating the widget.
 
 Optionally add [omarchy-workspaces](https://github.com/jonspinks/omarchy-workspaces),
 which marks the workspace that is streaming.
+
+## Remove
+
+Stop any session and put back an output a session left configured, then remove
+the widget:
+
+```bash
+ctl=~/.config/omarchy/plugins/blacksheep.airplay/bin/airplay-ctl
+"$ctl" stop; "$ctl" cleanup
+omarchy plugin remove blacksheep.airplay
+omarchy restart shell
+```
+
+To remove the sender and everything it and the widget keep:
+
+```bash
+rm -f ~/.local/bin/airplay
+rm -rf ~/.config/airplay-rs          # receiver pairing keys
+rm -rf ~/.local/state/airplay-rs     # audio handover claim
+rm -rf ~/.local/state/blacksheep.airplay   # the "Send audio" preference
+```
+
+The widget does not edit your Omarchy, Hyprland or PipeWire configuration
+files. The virtual display and the AirPlay audio output exist only while a
+session runs; with **Send audio** on, the default output is switched to the TV
+for the session and put back when it ends (or by `cleanup` above, if a session
+was killed).
 
 ## What it does
 
@@ -153,3 +183,7 @@ The script takes `$AIRPLAY_BIN` if it is set and executable, then looks for
 - Icon changes and anything set at construction only take effect after
   `omarchy restart shell`; plugin hot-reload re-reads the code but does not
   re-create the widget.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
