@@ -289,11 +289,12 @@ Panel {
 
   function start(host, mode, target) {
     root.busy = true
-    // A window title can contain quotes, spaces and non-ASCII, and this goes
-    // through `bash -lc`, so it is single-quoted with embedded quotes escaped.
+    // This goes through `bash -lc`, so every argument is single-quoted with
+    // embedded quotes escaped: a window title can hold anything, and the host
+    // came off the network.
     // The target is always passed (empty for screen/extend) so the audio
     // choice lands in airplay-ctl's fifth argument.
-    run("start " + host + " " + mode + " " + shellArg(target || "")
+    run("start " + shellArg(host) + " " + shellArg(mode) + " " + shellArg(target || "")
         + " audio=" + (root.audioWanted ? "on" : "off"), function() {
       root.busy = false
       root.selectedHost = ""

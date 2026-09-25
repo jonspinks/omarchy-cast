@@ -96,7 +96,7 @@ while one runs the switch shows that session's audio and cannot be flipped.
 
 With audio on the sound goes to the TV **instead of** the speakers, as on a
 Mac: the sender publishes its own output named after the receiver (`AirPlay:
-75" The Frame`), the laptop switches to it, and the previous output comes back
+Demo TV`), the laptop switches to it, and the previous output comes back
 when the session ends. The handover waits until the TV's volume has been set
 from the laptop's, so the speakers keep playing right up to the moment the TV
 starts making sound — and if that never happens the output is never taken.
@@ -125,7 +125,7 @@ key mark and connects silently, with nothing appearing on its screen).
 
 The code belongs to the connection that asked for it. Submitting it from a
 second command makes the receiver issue a *new* number and refuse the one you
-just read — measured on a Frame, which handed out 1878 and then rejected it. So
+just read — measured on a Frame, which showed one code (say 1234) and then rejected it. So
 the sender holds one socket open across the whole exchange: ask, wait for a
 human, answer on that same connection. `bin/airplay-ctl` owns that process:
 

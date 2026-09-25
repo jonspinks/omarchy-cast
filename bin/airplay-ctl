@@ -59,12 +59,21 @@ audio_pref() { [[ "$(cat "$AUDIO_PREF" 2>/dev/null)" == "on" ]] && printf on || 
 # ---- pairing helpers -------------------------------------------------------
 # One directory per receiver under the runtime dir, holding the input the
 # sender is reading and the JSON it has written.
-PAIR_ROOT="${XDG_RUNTIME_DIR:-/tmp}/blacksheep.airplay/pair"
+# Never a shared /tmp path: the sender reads the code from a file in here, so
+# the directory must be ours alone. Without XDG_RUNTIME_DIR it lives under the
+# state dir, and it is created 0700 either way.
+PAIR_ROOT="${XDG_RUNTIME_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/blacksheep.airplay/run}/blacksheep.airplay/pair"
 pair_dir() { printf '%s/%s' "$PAIR_ROOT" "$(printf '%s' "$1" | tr -c 'A-Za-z0-9._-' '_')"; }
+# A receiver address comes off the network (mDNS), so it is checked before it
+# reaches a command line: an IPv4/IPv6 address or a hostname, nothing else.
+check_host() {
+  [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9.:%_-]*$ && ${#1} -le 253 ]] \
+    || fail "not a receiver address: $(printf '%q' "$1")"
+}
 pair_kill() {
   local d; d="$(pair_dir "$1")"
-  pkill -f "tail -f $d/in" 2>/dev/null
-  pkill -f "pair $1 --interactive" 2>/dev/null
+  pkill -f -- "tail -f $d/in" 2>/dev/null
+  pkill -f -- "pair $1 --interactive" 2>/dev/null
   rm -rf "$d" 2>/dev/null
   return 0
 }
@@ -199,6 +208,7 @@ print(json.dumps({"ok": True, "windows": out}))
   start)
     host="${2:-}"; mode="${3:-extend}"; target="${4:-}"; audio="${5:-audio=off}"
     [[ -n "$host" ]] || fail "start needs a receiver address"
+    check_host "$host"
     case "$audio" in
       audio=on|on) audio=on ;;
       audio=off|off|"") audio=off ;;
@@ -281,10 +291,11 @@ print(json.dumps({"ok": True, "message": os.environ.get("MSG", "").strip()}))'
     # Ask the receiver to put a code on its screen, and KEEP THE CONNECTION
     # OPEN while the human reads it. That is not a nicety: pair-setup state
     # belongs to the connection, so a code submitted by a later process is
-    # always stale — measured on the Frame, which issued 1878 and then refused
+    # always stale — measured on a Frame, which issued one code and then refused
     # it. One process, one socket, the human in the middle.
     host="${2:-}"
     [[ -n "$host" ]] || fail "pair-start needs a receiver address"
+    check_host "$host"
     d="$(pair_dir "$host")"
 
     # A receiver that has just finished a session RESETS the next pair-setup
@@ -297,12 +308,15 @@ print(json.dumps({"ok": True, "message": os.environ.get("MSG", "").strip()}))'
     line=""
     for attempt in 1 2 3; do
       pair_kill "$host"
-      mkdir -p "$d" || fail "cannot create $d"
+      (umask 077; mkdir -p "$d") || fail "cannot create $d"
+      chmod 700 "$PAIR_ROOT" "$d" 2>/dev/null
       : > "$d/in"; : > "$d/out"; : > "$d/err"
       # `tail -f` holds stdin open; without a writer the sender would see EOF
       # and treat it as a cancel.
-      setsid bash -c "tail -f '$d/in' | '$BIN' pair '$host' --interactive --json --timeout 300 > '$d/out' 2> '$d/err'" \
-        >/dev/null 2>&1 &
+      # Paths and host go in as positional arguments, never spliced into the
+      # script text, so nothing in them can be read as shell.
+      setsid bash -c 'tail -f "$1/in" | "$2" pair "$3" --interactive --json --timeout 300 > "$1/out" 2> "$1/err"' \
+        airplay-pair "$d" "$BIN" "$host" >/dev/null 2>&1 &
       # The first line is emitted and flushed before the sender blocks on
       # stdin, so waiting for it is waiting for "the code is on the screen".
       # 40 s is tolerance for a slow receiver, not a fix for the reset above.
@@ -334,6 +348,7 @@ print(json.dumps({"ok": True, "message": os.environ.get("MSG", "").strip()}))'
   pair-code)
     host="${2:-}"; code="${3:-}"
     [[ -n "$host" ]] || fail "pair-code needs a receiver address"
+    check_host "$host"
     d="$(pair_dir "$host")"
     [[ -d "$d" && -s "$d/out" ]] || fail "no pairing is waiting for a code — start one first"
     [[ "$code" =~ ^[0-9]{4}$ ]] || fail "the code is four digits"
@@ -356,6 +371,7 @@ print(json.dumps({"ok": True, "message": os.environ.get("MSG", "").strip()}))'
     # never spends one of the receiver's few allowed attempts.
     host="${2:-}"
     [[ -n "$host" ]] || fail "pair-cancel needs a receiver address"
+    check_host "$host"
     pair_kill "$host"
     printf '{"ok":true,"cancelled":true}\n'
     ;;
