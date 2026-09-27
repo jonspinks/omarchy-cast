@@ -140,6 +140,12 @@ does not spend one of the receiver's few allowed attempts. A wrong code ends the
 run and the receiver shows a new number, so the panel asks you to request
 another rather than retyping.
 
+Ending a pairing only ever signals the one `pair-start` launched. It runs under
+`setsid` as its own process group, and `pair-start` records the group leader's
+pid and start time. Cancel and cleanup signal that group only if its leader is
+still that same process, so a pairing started some other way, even to the same
+receiver, is left alone.
+
 Pairing straight after a session used to fail with *Connection reset by peer*:
 a receiver that has just disconnected refuses the next pair-setup for a moment
 while it tears the old session down. Measured on a Frame — reset immediately
