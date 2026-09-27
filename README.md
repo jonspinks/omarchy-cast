@@ -1,35 +1,58 @@
 # omarchy-cast
 
-AirPlay from the Omarchy bar, modelled on the macOS Screen Mirroring menu:
-click the AirPlay icon, pick a television, pick how to use it.
+The AirPlay menu for Omarchy's bar: click the AirPlay icon, pick a TV, pick
+how to use it.
 
-Installs as the bar widget `blacksheep.airplay`. It is the front end for
-[omarchy-airplay](https://github.com/jonspinks/omarchy-airplay), the Rust
-sender that does the actual streaming.
+## AirPlay for Omarchy
 
-## The full set
+On a Mac, AirPlay is a menu in the menu bar: pick a TV, then pick how to use
+it. You can mirror the screen, send one window, or use the TV as a separate
+display. AirPlay for Omarchy brings that experience to Omarchy, natively. It
+isn't a wrapper around someone else's tool. The sender was written and tested
+from the ground up in Rust for Wayland and Hyprland, and performance and
+security were the design constraints from the start.
 
-AirPlay on Omarchy is three pieces, and the real experience needs all three:
+![AirPlay for Omarchy: the TV's workspace in the bar, and the AirPlay menu streaming a second desktop](preview.png)
 
-| Piece | What it does | Without it |
-|-------|--------------|------------|
-| [omarchy-airplay](https://github.com/jonspinks/omarchy-airplay) | The sender: finds receivers, pairs, captures the screen and streams it | Nothing casts. This widget has nothing to drive. |
-| omarchy-cast (this repo, `blacksheep.airplay`) | The bar menu: pick a TV, pick a mode, pair, stop | Every session is a terminal command. |
-| [omarchy-workspaces](https://github.com/jonspinks/omarchy-workspaces) (`blacksheep.workspaces`, listed as Cast Workspaces) | Marks the workspace that is on the TV with a TV glyph and keeps it at the end of the row | Extend works, but you can't see which workspace is the TV. |
+- **Three ways to use a TV, as on a Mac:** this screen, one window, or a second
+  desktop.
+- **Video, or video with sound.** With **Send audio** on, the laptop's sound
+  moves to the TV through its own *AirPlay: <TV>* output, the way a Mac hands
+  over its sound. The TV's volume follows the laptop's, and your speakers come
+  back when the session ends.
+- **The second desktop is one click away.** The TV gets its own workspace, and
+  the workspace bar shows it as a TV icon at the end of the row: click it to
+  switch there, and drag a window onto it to put that window on the TV.
+- **Fast.** Screen capture stays on the GPU and goes straight into the
+  hardware H.264 encoder (zero-copy). It takes about 5 ms from a frame being
+  drawn to being encoded, using about 7 % of one CPU core. See
+  [Performance](https://github.com/jonspinks/omarchy-airplay#performance).
+- **Careful.** Pairing keys stay private to your account. Every build is pinned
+  to a tested commit. The bar menu only ever stops, cleans up or signals
+  something it started and recorded.
 
-The third piece matters because of **Extend**, the mode that turns the TV into
-a second desktop. Extend gives the TV a workspace of its own, placed on a
-headless display that exists only on the television. It appears in the bar as
-one more number, 6 or 7, indistinguishable from the workspaces on your laptop.
-Sending a window to that workspace is how you put it on the TV, so you need to
-know which button it is. With the stock indicator you are guessing, and picking
-the wrong one moves your focus, and your pointer, onto a display that isn't in
-front of you. Cast Workspaces draws it as a TV and keeps it at the right-hand
-end however many workspaces you open afterwards.
+It is three pieces, and the full experience needs all three:
 
-Mirror and single-window casting don't create a workspace, so they work the
-same with or without it. Install all three if you want Extend to feel like a
-second monitor rather than a hidden one.
+| Piece | Its part in the set |
+|-------|---------------------|
+| [omarchy-airplay](https://github.com/jonspinks/omarchy-airplay) | **The sender.** Finds receivers, pairs, captures the screen, a window or a virtual display, encodes on the GPU and streams video and sound. |
+| [omarchy-cast](https://github.com/jonspinks/omarchy-cast) (`blacksheep.airplay`) | **The AirPlay menu.** The bar icon and panel: receivers, the three modes, pairing, Send audio and Stop. |
+| [omarchy-workspaces](https://github.com/jonspinks/omarchy-workspaces) (`blacksheep.workspaces`, listed as *Cast Workspaces*) | **The TV in your workspace bar.** Marks the second desktop's workspace with a TV icon at the end of the row, so it is one click to reach. |
+
+Omarchy plugins can't declare dependencies, so each piece is installed on its
+own. [omarchy-cast's README](https://github.com/jonspinks/omarchy-cast#install)
+has the steps in order.
+
+### This repo: the AirPlay menu
+
+Installs as the bar widget `blacksheep.airplay`. It lists the receivers on your
+network, grouped into video and audio. Click one to see the three modes. Its
+panel shows the live session: the receiver, the mode, where the sound is
+playing, the TV's workspace, and one **Stop**. It handles pairing with the code
+on the TV screen, and remembers **Send audio** for the next session. The work
+itself is done by the sender, which this menu drives through `bin/airplay-ctl`.
+Every session runs as a transient user unit, so a shell reload never orphans a
+stream.
 
 ## Install
 
@@ -52,7 +75,7 @@ omarchy restart shell
 
 Step 3 is separate because a plugin can't declare another plugin as a
 dependency: `omarchy plugin add` installs exactly one. See
-[The full set](#the-full-set) for what it adds.
+[AirPlay for Omarchy](#airplay-for-omarchy) for what it adds.
 
 The sender is pinned so that what you build is the commit this widget was
 checked with, not whatever its branch holds today. Move the pin forward

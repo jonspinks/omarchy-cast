@@ -5,12 +5,16 @@
   "version": "1.0.0",
   "author": "Jon",
   "license": "MIT",
-  "description": "Cast a screen, a second desktop, or one window to an AirPlay receiver",
-  "kinds": ["bar-widget"],
-  "entryPoints": { "barWidget": "Panel.qml" },
+  "description": "AirPlay for Omarchy, modelled on the Mac: mirror the screen, send one window, or use a TV as a second desktop, with sound",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
   "barWidget": {
     "displayName": "AirPlay",
-    "description": "Receivers on the network, the three ways to use one, and the state of a live session.",
+    "description": "The AirPlay menu: pick a TV, then this screen, one window or a second desktop, with video or video and system audio. Driven by a native Rust sender with zero-copy GPU capture and about 5 ms from capture to encoded frame.",
     "category": "Display",
     "allowMultiple": false,
     "defaultSection": "right"
