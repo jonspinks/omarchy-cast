@@ -7,6 +7,30 @@ Installs as the bar widget `blacksheep.airplay`. It is the front end for
 [omarchy-airplay](https://github.com/jonspinks/omarchy-airplay), the Rust
 sender that does the actual streaming.
 
+## The full set
+
+AirPlay on Omarchy is three pieces, and the real experience needs all three:
+
+| Piece | What it does | Without it |
+|-------|--------------|------------|
+| [omarchy-airplay](https://github.com/jonspinks/omarchy-airplay) | The sender: finds receivers, pairs, captures the screen and streams it | Nothing casts. This widget has nothing to drive. |
+| omarchy-cast (this repo, `blacksheep.airplay`) | The bar menu: pick a TV, pick a mode, pair, stop | Every session is a terminal command. |
+| [omarchy-workspaces](https://github.com/jonspinks/omarchy-workspaces) (`blacksheep.workspaces`, listed as Cast Workspaces) | Marks the workspace that is on the TV with a TV glyph and keeps it at the end of the row | Extend works, but you can't see which workspace is the TV. |
+
+The third piece matters because of **Extend**, the mode that turns the TV into
+a second desktop. Extend gives the TV a workspace of its own, placed on a
+headless display that exists only on the television. It appears in the bar as
+one more number, 6 or 7, indistinguishable from the workspaces on your laptop.
+Sending a window to that workspace is how you put it on the TV, so you need to
+know which button it is. With the stock indicator you are guessing, and picking
+the wrong one moves your focus, and your pointer, onto a display that isn't in
+front of you. Cast Workspaces draws it as a TV and keeps it at the right-hand
+end however many workspaces you open afterwards.
+
+Mirror and single-window casting don't create a workspace, so they work the
+same with or without it. Install all three if you want Extend to feel like a
+second monitor rather than a hidden one.
+
 ## Install
 
 The sender goes on first — this widget is only its front end:
@@ -18,8 +42,17 @@ git clone https://github.com/jonspinks/omarchy-airplay && git -C omarchy-airplay
 
 # 2. Then the widget
 omarchy plugin add https://github.com/jonspinks/omarchy-cast --enable
+
+# 3. And the workspace indicator that marks the TV (replaces the stock one)
+omarchy plugin add https://github.com/jonspinks/omarchy-workspaces --enable
+omarchy plugin disable omarchy.workspaces
+
 omarchy restart shell
 ```
+
+Step 3 is separate because a plugin can't declare another plugin as a
+dependency: `omarchy plugin add` installs exactly one. See
+[The full set](#the-full-set) for what it adds.
 
 The sender is pinned so that what you build is the commit this widget was
 checked with, not whatever its branch holds today. Move the pin forward
@@ -27,9 +60,6 @@ deliberately, when a newer sender has been tried with this widget.
 
 `omarchy restart shell` rather than a plugin reload: the bar icon is set at
 construction, and a hot reload re-reads the code without re-creating the widget.
-
-Optionally add [omarchy-workspaces](https://github.com/jonspinks/omarchy-workspaces),
-which marks the workspace that is streaming.
 
 ## Remove
 
