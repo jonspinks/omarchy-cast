@@ -85,10 +85,30 @@ check_host() {
   [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9.:%_-]*$ && ${#1} -le 253 ]] \
     || fail "not a receiver address: $(printf '%q' "$1")"
 }
+# Field 22 of /proc/<pid>/stat, in clock ticks since boot. It never changes
+# for a process and differs for any later process that reuses the pid. The
+# command name, in parentheses, can hold spaces; count fields after it.
+starttime() {
+  local stat
+  { stat=$(<"/proc/$1/stat"); } 2>/dev/null || return 1
+  read -ra stat <<<"${stat##*) }"
+  echo "${stat[19]}"
+}
+
+# `pair-start` runs the pairing under setsid, so the `tail` and the sender are
+# one process group led by the airplay-pair shell, and it records that
+# leader's pid and start time in $d/owner. Only that group is signalled, and
+# only while its leader is still the same process with this directory as its
+# argument. A pairing started any other way, even to the same receiver, is
+# never matched by its command line and so is left alone.
 pair_kill() {
-  local d; d="$(pair_dir "$1")"
-  pkill -f -- "tail -f $d/in" 2>/dev/null
-  pkill -f -- "pair $1 --interactive" 2>/dev/null
+  local d pid start argv; d="$(pair_dir "$1")"
+  if read -r pid start 2>/dev/null <"$d/owner" && [[ $pid =~ ^[0-9]+$ && -n $start ]]; then
+    mapfile -d '' -t argv 2>/dev/null <"/proc/$pid/cmdline"
+    if [[ "$(starttime "$pid")" == "$start" && ${argv[3]:-} == airplay-pair && ${argv[4]:-} == "$d" ]]; then
+      kill -TERM -- "-$pid" 2>/dev/null
+    fi
+  fi
   rm -rf "$d" 2>/dev/null
   return 0
 }
@@ -341,8 +361,17 @@ print(json.dumps({"ok": True, "message": os.environ.get("MSG", "").strip()}))'
       # and treat it as a cancel.
       # Paths and host go in as positional arguments, never spliced into the
       # script text, so nothing in them can be read as shell.
-      setsid bash -c 'tail -f "$1/in" | "$2" pair "$3" --interactive --json --timeout 300 > "$1/out" 2> "$1/err"' \
+      # The shell writes its own pid first: under setsid it is the session and
+      # process-group leader, which is what pair_kill signals.
+      setsid bash -c 'echo "$$" > "$1/pid"; tail -f "$1/in" | "$2" pair "$3" --interactive --json --timeout 300 > "$1/out" 2> "$1/err"' \
         airplay-pair "$d" "$BIN" "$host" >/dev/null 2>&1 &
+      for _ in $(seq 1 20); do
+        [[ -s "$d/pid" ]] && break
+        sleep 0.05
+      done
+      if read -r pid 2>/dev/null <"$d/pid" && start="$(starttime "$pid")"; then
+        printf '%s %s\n' "$pid" "$start" > "$d/owner"
+      fi
       # The first line is emitted and flushed before the sender blocks on
       # stdin, so waiting for it is waiting for "the code is on the screen".
       # 40 s is tolerance for a slow receiver, not a fix for the reset above.
