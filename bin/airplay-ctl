@@ -295,9 +295,13 @@ print(json.dumps({"ok": True, "windows": out}))
     case "${2:-}" in
       "") ;;
       on|off)
-        mkdir -p "$(dirname "$AUDIO_PREF")" || fail "cannot create $(dirname "$AUDIO_PREF")"
-        printf '%s\n' "$2" > "$AUDIO_PREF.tmp" && mv -f "$AUDIO_PREF.tmp" "$AUDIO_PREF" \
-          || fail "cannot write $AUDIO_PREF"
+        (umask 077; mkdir -p "$(dirname "$AUDIO_PREF")") || fail "cannot create $(dirname "$AUDIO_PREF")"
+        # A fresh private file beside the target, then a rename: nothing
+        # planted at a predictable name can be followed or truncated.
+        t=$(mktemp "$AUDIO_PREF.XXXXXX") || fail "cannot write $AUDIO_PREF"
+        if printf '%s\n' "$2" > "$t" && mv -fT "$t" "$AUDIO_PREF"; then :; else
+          rm -f "$t"; fail "cannot write $AUDIO_PREF"
+        fi
         ;;
       *) fail "audio-pref takes on or off" ;;
     esac
