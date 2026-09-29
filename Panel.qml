@@ -255,6 +255,24 @@ Panel {
     return String(host)
   }
 
+  // At most this much of a reply is ever held, and no call outlives its
+  // deadline. Discovery and pairing replies are shaped by devices on the
+  // network, and this shell runs all day: an oversized or stalled one must
+  // not grow it or leave it waiting. `timeout` ends the whole process group,
+  // so the pipe closes and done() still runs; a reply cut short fails to
+  // parse and reads as no answer. airplay-ctl caps what it reads too.
+  readonly property int replyCap: 1048576
+
+  // Each command's deadline, comfortably past the longest it legitimately
+  // takes: pair-start retries a slow receiver for up to about two minutes,
+  // pair-code waits 20 s for the answer, discover scans for its own time.
+  function deadlineFor(args) {
+    var words = String(args).split(" ")
+    var limits = { "pair-start": 150, "pair-code": 45, "start": 60, "stop": 30, "cleanup": 30 }
+    if (words[0] === "discover") return (Number(words[1]) || 4) + 20
+    return limits[words[0]] || 20
+  }
+
   function run(args, done) {
     var p = Qt.createQmlObject(
       'import Quickshell.Io; Process { stdout: StdioCollector { waitForEnd: true } }',
@@ -265,7 +283,8 @@ Panel {
       if (done) done(parsed)
       p.destroy()
     })
-    p.command = ["bash", "-lc", root.shellArg(root.ctl) + " " + args]
+    p.command = ["timeout", "-k", "2", String(root.deadlineFor(args)), "bash", "-lc",
+                 root.shellArg(root.ctl) + " " + args + " | head -c " + root.replyCap]
     p.running = true
   }
 
