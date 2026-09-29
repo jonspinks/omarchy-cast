@@ -32,6 +32,11 @@ set -uo pipefail
 # transient and carries OWNER_MARK in its environment. Nothing here stops or
 # reports on a unit that fails that test.
 UNIT="blacksheep-airplay-session"
+# The most any one reply from the sender is read. Receiver names and pairing
+# replies come off the network, so nothing a device sends can make this
+# script hold, or pass on to the panel, more than this. Real replies are a
+# few kilobytes; one cut short fails to parse and reads as no answer.
+MAX_OUT=262144
 OWNER_MARK="AIRPLAY_PANEL_OWNER=blacksheep.airplay"
 
 airplay_bin() {
@@ -123,7 +128,7 @@ case "${1:-status}" in
     # The daemon's own view (which output, which workspace, orphan or not),
     # plus whether our unit is up. The unit answers for --output and --window
     # sessions too, which write no ownership claim.
-    daemon="$("$BIN" status --json 2>/dev/null)" || daemon=""
+    daemon="$(timeout -k 2 10 "$BIN" status --json 2>/dev/null | head -c "$MAX_OUT")" || daemon=""
     [[ -z "$daemon" ]] && daemon="null"
     active=false; unit_active && active=true
     desc="$(systemctl --user show -p Description --value "$UNIT" 2>/dev/null)"
@@ -176,7 +181,10 @@ PY
 
   discover)
     t="${2:-4}"
-    out="$("$BIN" discover --json --timeout "$t" 2>/dev/null)" || out=""
+    # Digits only: it is used in arithmetic below, where bash would run
+    # anything else it was handed.
+    [[ "$t" =~ ^[0-9]{1,2}$ ]] || t=4
+    out="$(timeout -k 2 "$((t + 10))" "$BIN" discover --json --timeout "$t" 2>/dev/null | head -c "$MAX_OUT")" || out=""
     if [[ -z "$out" ]]; then
       printf '{"ok":true,"receivers":[]}\n'
     else
@@ -383,7 +391,7 @@ print(json.dumps({"ok": True, "message": os.environ.get("MSG", "").strip()}))'
         [[ -s "$d/out" ]] && break
         sleep 0.25
       done
-      line="$(head -1 "$d/out" 2>/dev/null)"
+      line="$(head -1 "$d/out" 2>/dev/null | head -c "$MAX_OUT")"
       case "$line" in
         *'"prompt_shown":true'*) break ;;
         *"Connection reset"*|*"Connection refused"*|*"Broken pipe"*)
@@ -416,7 +424,7 @@ print(json.dumps({"ok": True, "message": os.environ.get("MSG", "").strip()}))'
       [[ "$(wc -l < "$d/out")" -ge 2 ]] && break
       sleep 0.25
     done
-    line="$(sed -n 2p "$d/out")"
+    line="$(sed -n 2p "$d/out" | head -c "$MAX_OUT")"
     pair_kill "$host"
     if [[ -n "$line" ]]; then
       printf '%s\n' "$line"
