@@ -89,7 +89,7 @@ The sender goes on first — this widget is only its front end:
 ```bash
 # 1. Build and install the sender (see omarchy-airplay for dependencies),
 #    pinned to the commit this widget was tested against
-git clone https://github.com/jonspinks/omarchy-airplay && git -C omarchy-airplay checkout --detach 3fe48d7095b1123c5ded00832722ba73fc3b0f70 && cargo build --release --manifest-path omarchy-airplay/Cargo.toml && install -Dm755 omarchy-airplay/target/release/airplay ~/.local/bin/airplay
+git clone https://github.com/jonspinks/omarchy-airplay && git -C omarchy-airplay checkout --detach 312dcc9db57e7405f9552dcfc73fd010fa2cd0d3 && cargo build --release --manifest-path omarchy-airplay/Cargo.toml && install -Dm755 omarchy-airplay/target/release/airplay ~/.local/bin/airplay
 
 # 2. Then the widget
 omarchy plugin add https://github.com/jonspinks/omarchy-cast --enable
@@ -203,6 +203,14 @@ Most receivers connect without a code. One that is set to ask shows four digits
 on its own screen, and the panel offers **Pair with a code…** under a selected
 receiver (**Pair again…** if it is already paired — a paired receiver carries a
 key mark and connects silently, with nothing appearing on its screen).
+
+A paired receiver has to prove it is the same TV every time. If it can't (it
+was reset, or something else has taken its address) the sender stops before
+anything is sent, and the panel just shows no session. Use **Pair again…** with
+the code on the real TV's screen, or forget it with
+`airplay pair <address> --forget`. The sender never falls back to code-free
+pairing for a paired receiver: that route has a public PIN, so it can't tell the
+TV from an impostor.
 
 The code belongs to the connection that asked for it. Submitting it from a
 second command makes the receiver issue a *new* number and refuse the one you
