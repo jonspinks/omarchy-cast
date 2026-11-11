@@ -89,7 +89,7 @@ The sender goes on first — this widget is only its front end:
 ```bash
 # 1. Build and install the sender (see omarchy-airplay for dependencies),
 #    pinned to the commit this widget was tested against
-git clone https://github.com/jonspinks/omarchy-airplay && git -C omarchy-airplay checkout --detach 312dcc9db57e7405f9552dcfc73fd010fa2cd0d3 && cargo build --release --manifest-path omarchy-airplay/Cargo.toml && install -Dm755 omarchy-airplay/target/release/airplay ~/.local/bin/airplay
+git clone https://github.com/jonspinks/omarchy-airplay && git -C omarchy-airplay checkout --detach f6bf5091ecc73015c600144e069cd0c4635b4a66 && cargo build --release --manifest-path omarchy-airplay/Cargo.toml && install -Dm755 omarchy-airplay/target/release/airplay ~/.local/bin/airplay
 
 # 2. Then the widget
 omarchy plugin add https://github.com/jonspinks/omarchy-cast --enable
