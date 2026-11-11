@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import qs.Commons
 import qs.Ui
+import "Typing.js" as Typing
 
 // AirPlay bar widget: pick a television, pick how to use it, click.
 //
@@ -801,6 +802,9 @@ Panel {
         spacing: Style.space(6)
         visible: root.pairingWaiting
 
+        // Read-only to Qt, typed through Typing.js: a writable native field
+        // reads the whole clipboard by itself whenever it changes (Qt 6.12),
+        // with no size or time limit. Four digits; no paste.
         TextField {
           id: codeField
           width: Style.space(72)
@@ -808,6 +812,16 @@ Panel {
           inputMethodHints: Qt.ImhDigitsOnly
           placeholderText: "0000"
           enabled: !root.pairingBusy
+          readOnly: true
+          cursorVisible: activeFocus
+          Keys.onPressed: function(event) {
+            var typed = String(event.text || "")
+            if (/^[^\u0000-\u001f\u007f0-9]+$/.test(typed) && !(event.modifiers & (Qt.ControlModifier | Qt.AltModifier))) {
+              event.accepted = true
+              return
+            }
+            Typing.handle(codeField, event, !root.pairingBusy, false, null)
+          }
           foreground: root.bar ? root.bar.foreground : Color.foreground
           font.family: root.bar ? root.bar.fontFamily : Style.font.family
           onAccepted: root.pairSubmit(text)
