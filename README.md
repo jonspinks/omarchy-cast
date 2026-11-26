@@ -165,6 +165,7 @@ reason in the tooltip:
 | Receiver | State |
 |---|---|
 | Samsung Frame (`LS*`) | works — proven end to end |
+| LG webOS TV (`[LG] webOS TV …`) | selectable, marked untested: video proven on a 2021 NANO82, sound only clicks (omarchy-airplay#3) |
 | Mac | selectable, marked untested |
 | Apple TV | not supported — needs FairPlay, which the sender does not implement |
 | Speakers (Sonos, HomePod, amps) | not yet — the sender sends audio only alongside video, to a TV |
