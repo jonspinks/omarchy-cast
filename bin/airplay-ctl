@@ -202,7 +202,9 @@ except Exception:
 #              FairPlay needed.
 #   no       - Apple TV. Screen mirroring to it requires FairPlay, which the
 #              sender does not implement; a session would fail at setup.
-#   untested - a Mac receiver: may well need FairPlay too, never tried.
+#   untested - a Mac receiver: may well need FairPlay too, never tried. Also an LG webOS TV
+#              ("[LG] webOS TV ..."): screen, extend and window mirroring work on a 2021
+#              NANO82, but its sound only clicks (omarchy-airplay#3).
 #   audio    - speakers (Sonos, HomePod, amps): they announce on the same
 #              port, but audio is not in the sender yet.
 def classify(r):
@@ -213,6 +215,8 @@ def classify(r):
         return True, "no", "Apple TV needs FairPlay, which this sender does not support yet"
     if m.startswith("MAC"):
         return True, "untested", "A Mac as a receiver has not been tried; it may need FairPlay"
+    if "WEBOS" in (r.get("name") or "").upper():
+        return True, "untested", "LG webOS TV: the picture works; leave Send audio off, its sound only clicks"
     return False, "audio", "Audio receiver — audio is not in the sender yet"
 
 for r in rs:
